@@ -1,0 +1,320 @@
+openapi: 3.0.3
+info:
+  title: Orders Service
+  description: Microservicio de ordenes del laboratorio experimental (TFM GitOps con entrega progresiva gobernada por SLO). Valora los items con ms-products y solicita el pago a ms-payments.
+  version: 1.0.0
+  contact:
+    name: Ariel Vazquez
+
+paths:
+  /api/v1/orders/create:
+    post:
+      tags:
+        - Ordenes
+      summary: Crear una orden
+      description: |-
+        Crea una orden para un cliente.
+        Flujo:
+        - Consulta cada producto en ms-products y calcula el total.
+        - Solicita la autorizacion del pago a ms-payments.
+        - Retorna la orden con estado CONFIRMED si el pago se aprueba, o PAYMENT_REJECTED si se rechaza.
+      operationId: createOrder
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+        - $ref: '#/components/parameters/username'
+        - $ref: '#/components/parameters/clientIp'
+        - $ref: '#/components/parameters/channel'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            examples:
+              orden-basica:
+                summary: Orden con dos productos
+                value:
+                  data:
+                    customerId: "CUS-001"
+                    paymentMethod: "CARD"
+                    items:
+                      - productId: "PRD-001"
+                        quantity: 1
+                      - productId: "PRD-003"
+                        quantity: 2
+      responses:
+        '200':
+          description: Orden creada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+              examples:
+                confirmada:
+                  summary: Orden confirmada
+                  value:
+                    code: "000"
+                    frame:
+                      order:
+                        orderId: "9d4f2c1e-6a3b-4c58-8e0a-2f7d5b1c3a44"
+                        customerId: "CUS-001"
+                        status: "CONFIRMED"
+                        items:
+                          - productId: "PRD-001"
+                            name: "Laptop 14 pulgadas"
+                            quantity: 1
+                            unitPrice: 850.00
+                            subtotal: 850.00
+                          - productId: "PRD-003"
+                            name: "Teclado mecanico"
+                            quantity: 2
+                            unitPrice: 75.50
+                            subtotal: 151.00
+                        total:
+                          currency: "USD"
+                          amount: 1001.00
+                        paymentId: "5f0c1e0e-8c3a-4e5b-9d57-1c7c2d2a9a10"
+                        paymentStatus: "APPROVED"
+                        createdAt: "2026-11-14T16:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/orders/get-detail:
+    post:
+      tags:
+        - Ordenes
+      summary: Obtener detalle de una orden
+      description: Retorna el detalle de una orden creada previamente.
+      operationId: getOrderDetail
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+        - $ref: '#/components/parameters/username'
+        - $ref: '#/components/parameters/clientIp'
+        - $ref: '#/components/parameters/channel'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderDetailRequest'
+            examples:
+              consulta-detalle:
+                summary: Consulta de detalle por id
+                value:
+                  data:
+                    orderId: "9d4f2c1e-6a3b-4c58-8e0a-2f7d5b1c3a44"
+      responses:
+        '200':
+          description: Detalle de la orden obtenido exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    sessionId:
+      name: session-id
+      in: header
+      required: false
+      description: UUID de la sesion. Si no se envia, el servicio genera uno.
+      schema:
+        type: string
+        format: uuid
+        example: "123e4567-e89b-12d3-a456-426614174000"
+
+    username:
+      name: username
+      in: header
+      required: false
+      description: Nombre del usuario
+      schema:
+        type: string
+        example: "USRTFM"
+
+    clientIp:
+      name: client-ip
+      in: header
+      required: false
+      description: Direccion IP del cliente
+      schema:
+        type: string
+        example: "192.168.1.100"
+
+    channel:
+      name: channel
+      in: header
+      required: false
+      description: Canal de origen de la peticion
+      schema:
+        type: string
+        example: "LOADGEN"
+
+  schemas:
+    CreateOrderRequest:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - customerId
+            - paymentMethod
+            - items
+          properties:
+            customerId:
+              type: string
+              description: Identificador del cliente
+              example: "CUS-001"
+            paymentMethod:
+              type: string
+              description: Medio de pago
+              example: "CARD"
+            items:
+              type: array
+              minItems: 1
+              maxItems: 20
+              items:
+                $ref: '#/components/schemas/OrderItemRequest'
+
+    OrderItemRequest:
+      type: object
+      required:
+        - productId
+        - quantity
+      properties:
+        productId:
+          type: string
+          description: Identificador del producto
+          example: "PRD-001"
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Cantidad solicitada
+          example: 1
+
+    OrderDetailRequest:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - orderId
+          properties:
+            orderId:
+              type: string
+              description: Identificador de la orden
+              example: "9d4f2c1e-6a3b-4c58-8e0a-2f7d5b1c3a44"
+
+    OrderResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Codigo de respuesta
+          example: "000"
+        frame:
+          type: object
+          properties:
+            order:
+              $ref: '#/components/schemas/Order'
+
+    Order:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: Identificador de la orden
+        customerId:
+          type: string
+          description: Identificador del cliente
+        status:
+          type: string
+          description: Estado de la orden
+          enum: [CONFIRMED, PAYMENT_REJECTED]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        total:
+          $ref: '#/components/schemas/AmountObj'
+        paymentId:
+          type: string
+          description: Identificador del pago asociado
+        paymentStatus:
+          type: string
+          description: Estado del pago
+          enum: [APPROVED, REJECTED]
+        createdAt:
+          type: string
+          format: date-time
+          description: Fecha y hora de creacion
+
+    OrderItem:
+      type: object
+      properties:
+        productId:
+          type: string
+        name:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+        subtotal:
+          type: number
+
+    AmountObj:
+      type: object
+      properties:
+        currency:
+          type: string
+          example: "USD"
+        amount:
+          type: number
+          example: 1001.00
+
+    ErrorResponse:
+      type: object
+      properties:
+        title:
+          type: string
+        status:
+          type: integer
+        violations:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+  responses:
+    BadRequest:
+      description: Peticion invalida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Recurso no encontrado (orden o producto)
+
+    InternalServerError:
+      description: Error interno del servidor o fallo de una dependencia (ms-products, ms-payments)
