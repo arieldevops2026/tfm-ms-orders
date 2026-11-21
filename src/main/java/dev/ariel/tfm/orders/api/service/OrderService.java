@@ -49,7 +49,7 @@ public class OrderService {
     public Order createOrder(CreateOrderRequest request) {
         faultInjector.apply();
         MDCHelper.setAccount(GeneralUtils.coalesce(request.getCustomerId()));
-        log.info("Creando orden para el cliente: {}, items: {}", request.getCustomerId(), request.getItems().size());
+        log.info("Creando orden para el cliente: {}, Total items: {}", request.getCustomerId(), request.getItems().size());
 
         List<OrderItem> items = request.getItems().stream()
             .map(this::buildItem)
